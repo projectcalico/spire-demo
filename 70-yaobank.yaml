@@ -97,6 +97,7 @@ spec:
     name: http
   selector:
     app: customer
+  type: NodePort
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -106,6 +107,65 @@ metadata:
     app: yaobank
     summary: reader
 ---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: envoy-customer
+data:
+  envoy.yaml: |
+    admin:
+      access_log_path: /tmp/admin_access.log
+      address:
+        socket_address:
+          protocol: TCP
+          address: 127.0.0.1
+          port_value: 15000
+    static_resources:
+      listeners:
+      - name: inbound_http
+        address:
+          socket_address:
+            protocol: TCP
+            address: 0.0.0.0
+            port_value: 8080
+        filter_chains:
+        - filters:
+          - name: envoy.http_connection_manager
+            typed_config:
+              "@type": type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager
+              stat_prefix: ingress_http
+              route_config:
+                name: local_route
+                virtual_hosts:
+                - name: local_service
+                  domains: ["*"]
+                  routes:
+                  - match:
+                      prefix: "/"
+                    route:
+                      cluster: local_app
+              http_filters:
+              - name: envoy.router
+      clusters:
+      - name: local_app
+        connect_timeout: 0.25s
+        type: STATIC
+        # Comment out the following line to test on v6 networks
+        dns_lookup_family: V4_ONLY
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: local_app
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: 127.0.0.1
+                    port_value: 80
+
+---
+
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -119,9 +179,42 @@ spec:
         version: v1
     spec:
       serviceAccountName: customer
+      initContainers:
+      - name: istio-init
+        image: "docker.io/istio/proxy_init:1.0.7"
+        args:
+        - "-p"
+        - "8080"
+        - "-u"
+        - "1337"
+        #- "-i"
+        #- "*"
+        - "-b"
+        - "80"
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+          privileged: true
       containers:
       - name: customer
         image: spikecurtis/yaobank-customer:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 80
+      - name: envoy
+        image: envoyproxy/envoy:v1.10.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+            privileged: false
+            runAsGroup: 1337
+            runAsUser: 1337
+        volumeMounts:
+        - name: envoy-config
+          mountPath: /etc/envoy/
+          readOnly: true
+      volumes:
+        - name: envoy-config
+          configMap:
+            name: envoy-customer
