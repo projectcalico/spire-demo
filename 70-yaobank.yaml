@@ -114,6 +114,10 @@ data:
                       cluster: database
               http_filters:
               - name: envoy.router
+              access_log:
+              - name: envoy.file_access_log
+                config:
+                  path: "/dev/stdout"              
           tls_context:
             common_tls_context:
               tls_certificate_sds_secret_configs:
@@ -258,6 +262,9 @@ metadata:
   name: envoy-customer
 data:
   envoy.yaml: |
+    node:
+      id: customer
+      cluster: customer
     admin:
       access_log_path: /tmp/admin_access.log
       address:
@@ -298,6 +305,10 @@ data:
                       cluster: local_app
               http_filters:
               - name: envoy.router
+              access_log:
+              - name: envoy.file_access_log
+                config:
+                  path: "/dev/stdout"              
       clusters:
       - name: local_app
         connect_timeout: 0.25s
@@ -327,6 +338,29 @@ data:
                   socket_address:
                     address: summary
                     port_value: 80
+        tls_context:
+          common_tls_context:
+            validation_context_sds_secret_config:
+              name: spiffe://example.org
+              sds_config:
+                api_config_source:
+                  api_type: GRPC
+                  grpc_services:
+                    envoy_grpc:
+                      cluster_name: sds_server
+      - name: sds_server
+        connect_timeout: 0.25s
+        type: STATIC
+        http2_protocol_options: {}
+        load_assignment:
+          cluster_name: sds_server
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  pipe:
+                    path: /run/spire/sockets/agent.sock
+
 
 ---
 
@@ -374,11 +408,19 @@ spec:
             privileged: false
             runAsGroup: 1337
             runAsUser: 1337
+        #args: ["--component-log-level", "init:debug,http:debug,http2:debug,main:debug", "-c", "/etc/envoy/envoy.yaml"]
         volumeMounts:
         - name: envoy-config
           mountPath: /etc/envoy/
+          readOnly: true
+        - name: spire-agent-socket
+          mountPath: /run/spire/sockets
           readOnly: true
       volumes:
         - name: envoy-config
           configMap:
             name: envoy-customer
+        - name: spire-agent-socket
+          hostPath:
+            path: /run/spire/sockets
+            type: Directory
