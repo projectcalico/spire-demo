@@ -21,6 +21,7 @@ data:
       socket_path = "/run/spire/sockets/agent.sock"
       trust_bundle_path = "/run/spire/config/bootstrap.crt"
       trust_domain = "example.org"
+      enable_sds = true
     }
 
     plugins {
