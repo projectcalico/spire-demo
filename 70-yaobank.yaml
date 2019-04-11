@@ -71,6 +71,9 @@ metadata:
   name: envoy-summary
 data:
   envoy.yaml: |
+    node:
+      id: summary
+      cluster: summary
     admin:
       access_log_path: /tmp/admin_access.log
       address:
@@ -111,6 +114,16 @@ data:
                       cluster: database
               http_filters:
               - name: envoy.router
+          tls_context:
+            common_tls_context:
+              tls_certificate_sds_secret_configs:
+              - name: spiffe://example.org/ns/default/sa/summary
+                sds_config:
+                  api_config_source:
+                    api_type: GRPC
+                    grpc_services:
+                      envoy_grpc:
+                        cluster_name: sds_server
       clusters:
       - name: local_app
         connect_timeout: 0.25s
@@ -140,6 +153,18 @@ data:
                   socket_address:
                     address: database
                     port_value: 2379
+      - name: sds_server
+        connect_timeout: 0.25s
+        type: STATIC
+        http2_protocol_options: {}
+        load_assignment:
+          cluster_name: sds_server
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  pipe:
+                    path: /run/spire/sockets/agent.sock
 
 ---
 
@@ -191,10 +216,17 @@ spec:
         - name: envoy-config
           mountPath: /etc/envoy/
           readOnly: true
+        - name: spire-agent-socket
+          mountPath: /run/spire/sockets
+          readOnly: true
       volumes:
         - name: envoy-config
           configMap:
             name: envoy-summary
+        - name: spire-agent-socket
+          hostPath:
+            path: /run/spire/sockets
+            type: Directory
 
 ---
 apiVersion: v1
