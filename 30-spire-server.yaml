@@ -43,6 +43,7 @@ data:
         Organization = ["SPIFFE"],
         CommonName = "",
       }
+      upstream_bundle = true
     }
 
     plugins {

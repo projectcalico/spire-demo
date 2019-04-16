@@ -88,30 +88,22 @@ data:
           socket_address:
             protocol: TCP
             address: 0.0.0.0
-            port_value: 8080
+            port_value: 8081
         filter_chains:
         - filters:
           - name: envoy.http_connection_manager
-            typed_config:
-              "@type": type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager
+            config:
               stat_prefix: ingress_http
               route_config:
                 name: local_route
                 virtual_hosts:
                 - name: local_service
-                  domains: ["summary"]
-                  routes:
-                  - match:
-                      prefix: "/"
-                    route:
-                      cluster: local_app
-                - name: database
                   domains: ["*"]
                   routes:
                   - match:
                       prefix: "/"
                     route:
-                      cluster: database
+                      cluster: local_app
               http_filters:
               - name: envoy.router
               access_log:
@@ -128,6 +120,33 @@ data:
                     grpc_services:
                       envoy_grpc:
                         cluster_name: sds_server
+      - name: outbound_http
+        address:
+          socket_address:
+            protocol: TCP
+            address: 0.0.0.0
+            port_value: 8080
+        filter_chains:
+        - filters:
+          - name: envoy.http_connection_manager
+            config:
+              stat_prefix: egress_http
+              route_config:
+                name: local_route
+                virtual_hosts:
+                - name: database
+                  domains: ["*"]
+                  routes:
+                  - match:
+                      prefix: "/"
+                    route:
+                      cluster: database
+              http_filters:
+              - name: envoy.router
+              access_log:
+              - name: envoy.file_access_log
+                config:
+                  path: "/dev/stdout"              
       clusters:
       - name: local_app
         connect_timeout: 0.25s
@@ -188,6 +207,9 @@ spec:
       initContainers:
       - name: istio-init
         image: "docker.io/istio/proxy_init:1.0.7"
+        env:
+        - name: INBOUND_CAPTURE_PORT
+          value: "8081"
         args:
         - "-p"
         - "8080"
@@ -283,8 +305,7 @@ data:
         filter_chains:
         - filters:
           - name: envoy.http_connection_manager
-            typed_config:
-              "@type": type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager
+            config:
               stat_prefix: ingress_http
               route_config:
                 name: local_route
@@ -340,6 +361,10 @@ data:
                     port_value: 80
         tls_context:
           common_tls_context:
+            tls_params:
+            # combined_validation_context:
+            #   default_validation_context:
+            #     verify_subject_alt_name: ["spiffe://example.org/ns/default/sa/summary"]
             validation_context_sds_secret_config:
               name: spiffe://example.org
               sds_config:
@@ -408,7 +433,9 @@ spec:
             privileged: false
             runAsGroup: 1337
             runAsUser: 1337
-        #args: ["--component-log-level", "init:debug,http:debug,http2:debug,main:debug", "-c", "/etc/envoy/envoy.yaml"]
+        env:
+        - name: loglevel
+          value: debug
         volumeMounts:
         - name: envoy-config
           mountPath: /etc/envoy/
