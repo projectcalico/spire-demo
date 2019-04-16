@@ -152,7 +152,7 @@ spec:
           - "-listen-client-urls"
           - "http://0.0.0.0:2379"
       - name: envoy
-        image: envoyproxy/envoy:v1.10.0
+        image: envoyproxy/envoy:v1.9.0
         imagePullPolicy: IfNotPresent
         securityContext:
             privileged: false
@@ -254,6 +254,11 @@ data:
                     route:
                       cluster: local_app
               http_filters:
+              - name: envoy.ext_authz
+                config:
+                  grpc_service:
+                    envoy_grpc:
+                      cluster_name: dikastes
               - name: envoy.router
               access_log:
               - name: envoy.file_access_log
@@ -368,7 +373,18 @@ data:
                 address:
                   pipe:
                     path: /run/spire/sockets/agent.sock
-
+      - name: dikastes
+        connect_timeout: 0.25s
+        type: STATIC
+        http2_protocol_options: {}
+        load_assignment:
+          cluster_name: dikastes
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  pipe:
+                    path: /var/run/dikastes/dikastes.sock
 ---
 
 apiVersion: extensions/v1beta1
@@ -412,7 +428,7 @@ spec:
         ports:
         - containerPort: 80
       - name: envoy
-        image: envoyproxy/envoy:v1.10.0
+        image: envoyproxy/envoy:v1.9.0
         imagePullPolicy: IfNotPresent
         securityContext:
             privileged: false
@@ -634,7 +650,7 @@ spec:
         ports:
         - containerPort: 80
       - name: envoy
-        image: envoyproxy/envoy:v1.10.0
+        image: envoyproxy/envoy:v1.9.0
         imagePullPolicy: IfNotPresent
         securityContext:
             privileged: false
