@@ -158,6 +158,9 @@ spec:
             privileged: false
             runAsGroup: 1337
             runAsUser: 1337
+        env:
+        - name: loglevel
+          value: debug
         volumeMounts:
         - name: envoy-config
           mountPath: /etc/envoy/
@@ -165,14 +168,30 @@ spec:
         - name: spire-agent-socket
           mountPath: /run/spire/sockets
           readOnly: true
+        - mountPath: /var/run/dikastes
+          name: dikastes-sock
+      - name: dikastes
+        image: calico/dikastes:v3.6.1
+        args: ["/dikastes", "server", "-l", "/var/run/dikastes/dikastes.sock", "-d", "/var/run/felix/nodeagent/socket"]
+        volumeMounts:
+        - mountPath: /var/run/dikastes
+          name: dikastes-sock
+        - mountPath: /var/run/felix
+          name: felix-sync
       volumes:
-        - name: envoy-config
-          configMap:
-            name: envoy-database
-        - name: spire-agent-socket
-          hostPath:
-            path: /run/spire/sockets
-            type: Directory
+      - name: dikastes-sock
+        emptyDir:
+          medium: Memory
+      - name: felix-sync
+        flexVolume:
+          driver: nodeagent/uds
+      - name: envoy-config
+        configMap:
+          name: envoy-database
+      - name: spire-agent-socket
+        hostPath:
+          path: /run/spire/sockets
+          type: Directory
 ---
 apiVersion: v1
 kind: Service
