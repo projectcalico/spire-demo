@@ -58,6 +58,11 @@ data:
                     route:
                       cluster: local_app
               http_filters:
+              - name: envoy.ext_authz
+                config:
+                  grpc_service:
+                    envoy_grpc:
+                      cluster_name: dikastes
               - name: envoy.router
               access_log:
               - name: envoy.file_access_log
@@ -108,6 +113,18 @@ data:
                 address:
                   pipe:
                     path: /run/spire/sockets/agent.sock
+      - name: dikastes
+        connect_timeout: 0.25s
+        type: STATIC
+        http2_protocol_options: {}
+        load_assignment:
+          cluster_name: dikastes
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  pipe:
+                    path: /var/run/dikastes/dikastes.sock
 ---
 
 apiVersion: extensions/v1beta1
@@ -532,6 +549,13 @@ data:
                       prefix: "/"
                     route:
                       cluster: summary
+                - name: database
+                  domains: ["database"]
+                  routes:
+                  - match:
+                      prefix: "/"
+                    route:
+                      cluster: database
                 - name: local_service
                   domains: ["*"]
                   routes:
@@ -580,6 +604,43 @@ data:
             combined_validation_context:
               default_validation_context:
                 verify_subject_alt_name: ["spiffe://example.org/ns/default/sa/summary"]
+              validation_context_sds_secret_config:
+                name: spiffe://example.org
+                sds_config:
+                  api_config_source:
+                    api_type: GRPC
+                    grpc_services:
+                      envoy_grpc:
+                        cluster_name: sds_server
+            tls_certificate_sds_secret_configs:
+            - name: spiffe://example.org/ns/default/sa/customer
+              sds_config:
+                api_config_source:
+                  api_type: GRPC
+                  grpc_services:
+                    envoy_grpc:
+                      cluster_name: sds_server              
+      - name: database
+        connect_timeout: 0.25s
+        type: STRICT_DNS
+        # Comment out the following line to test on v6 networks
+        dns_lookup_family: V4_ONLY
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: database
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: database
+                    port_value: 2379
+        tls_context:
+          common_tls_context:
+            tls_params:
+            combined_validation_context:
+              default_validation_context:
+                verify_subject_alt_name: ["spiffe://example.org/ns/default/sa/database"]
               validation_context_sds_secret_config:
                 name: spiffe://example.org
                 sds_config:
