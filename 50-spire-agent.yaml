@@ -39,12 +39,9 @@ data:
       WorkloadAttestor "k8s" {
         plugin_data {
           kubelet_read_only_port = "10255"
+          # minikube can be a bit slow to set things up; poll for longer than usual.
+          max_poll_attempts = 50
         }
-      }
-
-      WorkloadAttestor "unix" {
-          plugin_data {
-          }
       }
     }
   bootstrap.crt: |
