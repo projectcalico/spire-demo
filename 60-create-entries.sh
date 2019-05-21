@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 SPIRE='kubectl exec -ti -n spire spire-server-0 -- /opt/spire/bin/spire-server'
 
 $SPIRE entry create -spiffeID spiffe://example.org/k8s -selector k8s_sat:cluster:demo-cluster -node
